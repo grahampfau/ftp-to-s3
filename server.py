@@ -55,7 +55,7 @@ def process_file(filename):
     # Delete file
     os.unlink(filename)
     logger.debug(("Deleted file: {}".format(filename)))
-    ## Send URL to specified endpoint
+    # Send URL to specified endpoint
     payload = {'MediaUrls': url}
     r = requests.post(konf.messaging_request_url, data=payload)
     logger.debug(("Request made: {}".format(r)))
@@ -69,7 +69,8 @@ class FTPWorker(threading.Thread):
     def run(self):
         logger.debug("Worker online")
         while True:
-            logger.debug("Worker waiting for job ... %s" % str(job_queue.qsize()))
+            logger.debug(
+                "Worker waiting for job ... %s" % str(job_queue.qsize()))
             filename = job_queue.get()
             logger.debug("Worker got job: %s, qsize: %s" % (
                 filename,
@@ -99,6 +100,7 @@ def main():
 
     # Instantiate FTP handler class
     handler = FTPHandler
+    handler.permit_foreign_address = True
     handler.authorizer = authorizer
 
     # Define a customized banner (string returned when client connects)
