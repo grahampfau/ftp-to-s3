@@ -82,7 +82,7 @@ def main():
 
     # Instantiate FTP handler class
     handler = FTPHandler
-    handler.permit_foreign_address = True
+    handler.permit_foreign_address = False
     handler.passive_ports = range(60000, 60001)
     handler.authorizer = authorizer
 
