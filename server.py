@@ -83,6 +83,7 @@ def main():
     # Instantiate FTP handler class
     handler = FTPHandler
     handler.permit_foreign_address = True
+    handler.passive_ports = range(60000, 60001)
     handler.authorizer = authorizer
 
     # Define a customized banner (string returned when client connects)
