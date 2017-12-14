@@ -4,7 +4,6 @@ import os
 import threading
 from queue import Queue
 
-import requests
 from boto.s3.connection import S3Connection
 from boto.s3.key import Key
 from pyftpdlib.authorizers import DummyAuthorizer
@@ -39,10 +38,6 @@ def process_file(filename):
     # Delete file
     os.unlink(filename)
     logger.debug(("Deleted file: {}".format(filename)))
-    # Send URL to specified endpoint
-    payload = {'MediaUrls': url}
-    r = requests.post(konf.messaging_request_url, data=payload)
-    logger.debug(("Request made: {}".format(r)))
 
 
 class FTPWorker(threading.Thread):

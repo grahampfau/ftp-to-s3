@@ -1,4 +1,3 @@
 boto
 distribute
 pyftpdlib
-requests
