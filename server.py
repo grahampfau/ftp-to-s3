@@ -19,6 +19,9 @@ logger.setLevel(logging.DEBUG)
 
 konf = Konfig()
 
+root_log_level = logging.getLevelName(konf.root_log_level)
+root_logger = logging.getLogger()
+root_logger.setLevel(root_log_level)
 ftp_port = int(konf.ftp_port)
 s3_connection = S3Connection(konf.aws_access_key_id,
                              konf.aws_secret_access_key)
