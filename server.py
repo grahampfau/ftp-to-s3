@@ -28,26 +28,10 @@ s3_bucket = s3_connection.get_bucket(konf.aws_bucket_name)
 job_queue = Queue()
 
 
-# From: http://stackoverflow.com/a/3431835
-def hashfile(afile, hasher, blocksize=65536):
-    buf = afile.read(blocksize)
-    while len(buf) > 0:
-        hasher.update(buf)
-        buf = afile.read(blocksize)
-    return hasher.hexdigest()
-
-
 def process_file(filename):
-    # Write to log
-    f = open('log', 'w+')
-    f.write("Got file: {}".format(filename))
-    f.close()
-    # Calculate SHA-1 sum of file
-    sum = hashfile(open(filename, 'rb'), hashlib.sha1())
-    logger.debug(("SHA-1: {}".format(sum)))
     # Upload to S3, get URL
     s3_key = Key(s3_bucket)
-    s3_key.key = sum
+    s3_key.key = filename.split(os.getcwd() + '/ftp')[-1]
     s3_key.set_contents_from_filename(filename)
     s3_key.set_acl('public-read')
     url = s3_key.generate_url(expires_in=86400)  # 1 day
