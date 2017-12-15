@@ -1,4 +1,3 @@
-import hashlib
 import logging
 import os
 import threading
@@ -60,7 +59,6 @@ class FTPWorker(threading.Thread):
                 filename,
                 str(job_queue.qsize())))
             process_file(filename)
-            # time.sleep(1)
             job_queue.task_done()
             logger.debug("Task done, qsize: %s" % str(job_queue.qsize()))
 
@@ -74,13 +72,11 @@ def main():
     # Instantiate a dummy authorizer for managing 'virtual' users
     authorizer = DummyAuthorizer()
 
-    # Define a new user having full r/w permissions and a read-only
-    # anonymous user
+    # Define a new user having full r/w permissions
     authorizer.add_user(konf.ftp_username,
                         konf.ftp_password,
                         'ftp/',
                         perm='elradfmwM')
-    # authorizer.add_anonymous(os.getcwd())
 
     # Instantiate FTP handler class
     handler = FTPHandler
@@ -107,7 +103,7 @@ if __name__ == '__main__':
     for item in s3_bucket.list():
         if item.name.endswith('/'):
             if not os.path.exists('ftp/' + item.name):
-                logger.debug('Restoring dir: ftp/' + item.name)
+                logger.debug('Restoring directory: ftp/' + item.name)
                 os.mkdir('ftp/' + item.name)
     for i in range(0, 4):
         t = FTPWorker(job_queue)
