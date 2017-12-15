@@ -23,6 +23,8 @@ root_log_level = logging.getLevelName(konf.root_log_level)
 root_logger = logging.getLogger()
 root_logger.setLevel(root_log_level)
 ftp_port = int(konf.ftp_port)
+passive_port_lower = int(konf.passive_port_lower)
+passive_port_upper = int(konf.passive_port_upper)
 s3_connection = S3Connection(konf.aws_access_key_id,
                              konf.aws_secret_access_key)
 s3_bucket = s3_connection.get_bucket(konf.aws_bucket_name)
@@ -83,7 +85,7 @@ def main():
     # Instantiate FTP handler class
     handler = FTPHandler
     handler.permit_foreign_addresses = True
-    handler.passive_ports = range(60000, 60001)
+    handler.passive_ports = range(passive_port_lower, passive_port_upper)
     handler.authorizer = authorizer
 
     # Define a customized banner (string returned when client connects)
