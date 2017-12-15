@@ -105,9 +105,10 @@ def main():
 if __name__ == '__main__':
     # Restore directories from S3 bucket
     for item in s3_bucket.list():
-        if not os.path.exists('ftp/' + item.name):
-            logger.debug('Restoring dir: ftp/' + item.name)
-            os.mkdir('ftp/' + item.name)
+        if item.name.endswith('/'):
+            if not os.path.exists('ftp/' + item.name):
+                logger.debug('Restoring dir: ftp/' + item.name)
+                os.mkdir('ftp/' + item.name)
     for i in range(0, 4):
         t = FTPWorker(job_queue)
         t.daemon = True
