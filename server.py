@@ -13,14 +13,14 @@ from konfig import Konfig
 
 log_format = '%(asctime)s - %(levelname)s - %(message)s'
 logging.basicConfig(format=log_format)
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+log= logging.getLogger(__name__)
+log.setLevel(logging.DEBUG)
 
 konf = Konfig()
 
 root_log_level = logging.getLevelName(konf.root_log_level)
-root_logger = logging.getLogger()
-root_logger.setLevel(root_log_level)
+root_log= logging.getLogger()
+root_log.setLevel(root_log_level)
 ftp_port = int(konf.ftp_port)
 passive_port_lower = int(konf.passive_port_lower)
 passive_port_upper = int(konf.passive_port_upper) + 1
@@ -39,10 +39,10 @@ def process_file(filename):
     s3_key.set_contents_from_filename(filename)
     s3_key.set_acl('public-read')
     url = s3_key.generate_url(expires_in=86400)  # 1 day
-    logger.debug(("File now in S3 at: {}".format(url)))
+    log.debug(("File now in S3 at: {}".format(url)))
     # Delete file
     os.unlink(filename)
-    logger.debug(("Deleted file: {}".format(filename)))
+    log.debug(("Deleted file: {}".format(filename)))
 
 
 class FTPWorker(threading.Thread):
@@ -51,17 +51,21 @@ class FTPWorker(threading.Thread):
         threading.Thread.__init__(self)
 
     def run(self):
-        logger.debug("Worker online")
+        log.debug("Worker online")
         while True:
-            logger.debug(
+            log.debug(
                 "Worker waiting for job ... %s" % str(job_queue.qsize()))
             filename = job_queue.get()
-            logger.debug("Worker got job: %s, qsize: %s" % (
+            log.debug("Worker got job: %s, qsize: %s" % (
                 filename,
                 str(job_queue.qsize())))
-            process_file(filename)
-            job_queue.task_done()
-            logger.debug("Task done, qsize: %s" % str(job_queue.qsize()))
+            try:
+                process_file(filename)
+                log.debug("Task done, qsize: %s" % str(job_queue.qsize()))
+            except Exception as e:
+                log.error("Task failed with error: %s" % str(e))
+            finally:
+                job_queue.task_done()
 
 
 class FTPHandler(FTPHandler):
@@ -93,7 +97,7 @@ def main():
     server = FTPServer(address, handler)
 
     # set a limit for connections
-    logger.debug('Max number of connections: ' + str(len(passive_range)))
+    log.debug('Max number of connections: ' + str(len(passive_range)))
     server.max_cons = len(passive_range)
     server.max_cons_per_ip = len(passive_range)
 
@@ -103,13 +107,13 @@ def main():
 if __name__ == '__main__':
     # Restore directories from S3 bucket
     for item in s3_bucket.list():
-        if item.name.endswith('/'):
-            if not os.path.exists('ftp/' + item.name):
-                logger.debug('Restoring directory: ftp/' + item.name)
-                os.mkdir('ftp/' + item.name)
+        directory = 'ftp/' + item.name.rsplit('/', 1)[0]
+        if not os.path.exists(directory):
+            log.debug('Restoring directory: ' + directory)
+            os.makedirs(directory, exist_ok=True)
     for i in range(0, 4):
         t = FTPWorker(job_queue)
         t.daemon = True
         t.start()
-        logger.debug("Started worker")
+        log.debug("Started worker")
     main()
