@@ -41,8 +41,8 @@ def process_file(filename):
     url = s3_key.generate_url(expires_in=86400)  # 1 day
     log.debug(('File now in S3 at: {}'.format(url)))
     # Delete file
-    #os.unlink(filename)
-    #log.debug(("Deleted file: {}".format(filename)))
+    # os.unlink(filename)
+    # log.debug(("Deleted file: {}".format(filename)))
 
 
 class FTPWorker(threading.Thread):
@@ -77,26 +77,35 @@ class FTPHandler(FTPHandler):
 
     def ftp_MKD(self, path):
         if path is not None and not os.path.exists(path):
-                os.mkdir(path)
-                local_path = path.split(self.exclude_path)[-1]
-                s3_dir = s3_bucket.new_key(local_path + '/')
-                s3_dir.set_contents_from_string('')
-                log.debug('New folder: %s' % local_path)
-                self.respond(
-                    '257 "%s" dir created.' % path.replace('"', '""'))
-                return path
+            os.mkdir(path)
+            local_path = path.split(self.exclude_path)[-1]
+            s3_dir = s3_bucket.new_key(local_path + '/')
+            s3_dir.set_contents_from_string('')
+            log.debug('New folder: %s' % local_path)
+            self.respond(
+                '257 "%s" dir created.' % path.replace('"', '""'))
+            return path
 
     def ftp_RMD(self, path):
         if path is not None and os.path.exists(path):
-                os.rmdir(path)
-                local_path = path.split(self.exclude_path)[-1]
-                for item in s3_bucket.list(prefix=local_path.strip('/')):
-                    item.delete()
-                    log.debug('Deleted file: %s ' % item.name)
-                s3_bucket.delete_key(local_path + '/')
-                log.debug('Deleted folder : %s' % local_path)
-                self.respond('250 Directory Removed')
-                return path
+            os.rmdir(path)
+            local_path = path.split(self.exclude_path)[-1]
+            for item in s3_bucket.list(prefix=local_path.strip('/')):
+                item.delete()
+                log.debug('Deleted file: %s ' % item.name)
+            s3_bucket.delete_key(local_path + '/')
+            log.debug('Deleted folder : %s' % local_path)
+            self.respond('250 Directory Removed')
+            return path
+
+    def ftp_DELE(self, path):
+        if path is not None and os.path.exists(path):
+            os.unlink(path)
+            local_path = path.split(self.exclude_path)[-1]
+            s3_bucket.delete_key(local_path)
+            log.debug('Deleted file: %s ' % local_path)
+            self.respond("250 File removed.")
+            return path
 
 
 def main():
@@ -130,19 +139,20 @@ def main():
     # start ftp server
     server.serve_forever()
 
+
 if __name__ == '__main__':
     # Restore contents from S3 bucket
     for item in s3_bucket.list():
         if item.name.endswith('/'):
-            #directory = 'ftp/' + item.name.rsplit('/', 1)[0]
             directory = 'ftp/' + item.name
             if not os.path.exists(directory):
                 log.debug('Restoring directory: ' + directory)
                 os.makedirs(directory, exist_ok=True)
         else:
             filename = 'ftp/' + item.name
-            log.debug('Restoring file: %s' % filename)
-            item.get_contents_to_filename(filename)
+            if not os.path.exists(filename):
+                log.debug('Restoring file: %s' % filename)
+                item.get_contents_to_filename(filename)
     for i in range(0, 4):
         t = FTPWorker(job_queue)
         t.daemon = True
