@@ -46,22 +46,25 @@ def process_file(filename):
 
 
 class FTPWorker(threading.Thread):
-    def __init__(self, q):
+    def __init__(self, q, worker_id):
         self.q = q
+        self.worker_id = worker_id
         threading.Thread.__init__(self)
 
     def run(self):
-        log.debug('Worker online')
+        log.debug('Worker %s online' % self.worker_id)
         while True:
-            log.debug(
-                'Worker waiting for job ... %s' % str(job_queue.qsize()))
+            log.debug('Worker %i waiting for job ... %i' % (
+                    self.worker_id,
+                    job_queue.qsize()))
             filename = job_queue.get()
-            log.debug('Worker got job: %s, qsize: %s' % (
+            log.debug('Worker %i got job: %s, qsize: %i' % (
+                self.worker_id,
                 filename,
-                str(job_queue.qsize())))
+                job_queue.qsize()))
             try:
                 process_file(filename)
-                log.debug('Task done, qsize: %s' % str(job_queue.qsize()))
+                log.debug('Task done, qsize: %i' % job_queue.qsize())
             except Exception as e:
                 log.error('Task failed with error: %s' % str(e))
             finally:
@@ -146,7 +149,7 @@ if __name__ == '__main__':
         if item.name.endswith('/'):
             directory = 'ftp/' + item.name
             if not os.path.exists(directory):
-                log.debug('Restoring directory: ' + directory)
+                log.debug('Restoring directory: %s' % directory)
                 os.makedirs(directory, exist_ok=True)
         else:
             filename = 'ftp/' + item.name
@@ -154,7 +157,7 @@ if __name__ == '__main__':
                 log.debug('Restoring file: %s' % filename)
                 item.get_contents_to_filename(filename)
     for i in range(0, 4):
-        t = FTPWorker(job_queue)
+        t = FTPWorker(job_queue, i)
         t.daemon = True
         t.start()
         log.debug('Started worker')
