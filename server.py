@@ -13,13 +13,13 @@ from konfig import Konfig
 
 log_format = '%(asctime)s - %(levelname)s - %(message)s'
 logging.basicConfig(format=log_format)
-log= logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
 konf = Konfig()
 
 root_log_level = logging.getLevelName(konf.root_log_level)
-root_log= logging.getLogger()
+root_log = logging.getLogger()
 root_log.setLevel(root_log_level)
 ftp_port = int(konf.ftp_port)
 passive_port_lower = int(konf.passive_port_lower)
@@ -39,10 +39,10 @@ def process_file(filename):
     s3_key.set_contents_from_filename(filename)
     s3_key.set_acl('public-read')
     url = s3_key.generate_url(expires_in=86400)  # 1 day
-    log.debug(("File now in S3 at: {}".format(url)))
+    log.debug(('File now in S3 at: {}'.format(url)))
     # Delete file
-    os.unlink(filename)
-    log.debug(("Deleted file: {}".format(filename)))
+    #os.unlink(filename)
+    #log.debug(("Deleted file: {}".format(filename)))
 
 
 class FTPWorker(threading.Thread):
@@ -51,26 +51,52 @@ class FTPWorker(threading.Thread):
         threading.Thread.__init__(self)
 
     def run(self):
-        log.debug("Worker online")
+        log.debug('Worker online')
         while True:
             log.debug(
-                "Worker waiting for job ... %s" % str(job_queue.qsize()))
+                'Worker waiting for job ... %s' % str(job_queue.qsize()))
             filename = job_queue.get()
-            log.debug("Worker got job: %s, qsize: %s" % (
+            log.debug('Worker got job: %s, qsize: %s' % (
                 filename,
                 str(job_queue.qsize())))
             try:
                 process_file(filename)
-                log.debug("Task done, qsize: %s" % str(job_queue.qsize()))
+                log.debug('Task done, qsize: %s' % str(job_queue.qsize()))
             except Exception as e:
-                log.error("Task failed with error: %s" % str(e))
+                log.error('Task failed with error: %s' % str(e))
             finally:
                 job_queue.task_done()
 
 
 class FTPHandler(FTPHandler):
+
+    exclude_path = os.getcwd() + '/ftp/'
+
     def on_file_received(self, filename):
         job_queue.put(filename)
+
+    def ftp_MKD(self, path):
+        if path is not None and not os.path.exists(path):
+                os.mkdir(path)
+                local_path = path.split(self.exclude_path)[-1]
+                s3_dir = s3_bucket.new_key(local_path + '/')
+                s3_dir.set_contents_from_string('')
+                log.debug('New folder: %s' % local_path)
+                self.respond(
+                    '257 "%s" dir created.' % path.replace('"', '""'))
+                return path
+
+    def ftp_RMD(self, path):
+        if path is not None and os.path.exists(path):
+                os.rmdir(path)
+                local_path = path.split(self.exclude_path)[-1]
+                for item in s3_bucket.list(prefix=local_path.strip('/')):
+                    item.delete()
+                    log.debug('Deleted file: %s ' % item.name)
+                s3_bucket.delete_key(local_path + '/')
+                log.debug('Deleted folder : %s' % local_path)
+                self.respond('250 Directory Removed')
+                return path
 
 
 def main():
@@ -90,7 +116,7 @@ def main():
     handler.authorizer = authorizer
 
     # Define a customized banner (string returned when client connects)
-    handler.banner = "pyftpdlib based ftpd ready."
+    handler.banner = 'pyftpdlib based ftpd ready.'
 
     # Instantiate FTP server class and listen on 0.0.0.0:2121
     address = ('', ftp_port)
@@ -105,15 +131,21 @@ def main():
     server.serve_forever()
 
 if __name__ == '__main__':
-    # Restore directories from S3 bucket
+    # Restore contents from S3 bucket
     for item in s3_bucket.list():
-        directory = 'ftp/' + item.name.rsplit('/', 1)[0]
-        if not os.path.exists(directory):
-            log.debug('Restoring directory: ' + directory)
-            os.makedirs(directory, exist_ok=True)
+        if item.name.endswith('/'):
+            #directory = 'ftp/' + item.name.rsplit('/', 1)[0]
+            directory = 'ftp/' + item.name
+            if not os.path.exists(directory):
+                log.debug('Restoring directory: ' + directory)
+                os.makedirs(directory, exist_ok=True)
+        else:
+            filename = 'ftp/' + item.name
+            log.debug('Restoring file: %s' % filename)
+            item.get_contents_to_filename(filename)
     for i in range(0, 4):
         t = FTPWorker(job_queue)
         t.daemon = True
         t.start()
-        log.debug("Started worker")
+        log.debug('Started worker')
     main()
