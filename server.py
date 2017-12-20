@@ -32,7 +32,7 @@ s3_bucket = s3_connection.get_bucket(konf.aws_bucket_name)
 job_queue = Queue()
 
 
-def process_file(filename):
+def upload_file(filename):
     # Upload to S3, get URL
     s3_key = Key(s3_bucket)
     s3_key.key = filename.split(os.getcwd() + '/ftp')[-1]
@@ -57,13 +57,13 @@ class FTPWorker(threading.Thread):
             log.debug('Worker %i waiting for job ... %i' % (
                     self.worker_id,
                     job_queue.qsize()))
-            filename = job_queue.get()
+            func = job_queue.get()
             log.debug('Worker %i got job: %s, qsize: %i' % (
                 self.worker_id,
                 filename,
                 job_queue.qsize()))
             try:
-                process_file(filename)
+                func()
                 log.debug('Task done, qsize: %i' % job_queue.qsize())
             except Exception as e:
                 log.error('Task failed with error: %s' % str(e))
@@ -71,44 +71,56 @@ class FTPWorker(threading.Thread):
                 job_queue.task_done()
 
 
-class FTPHandler(FTPHandler):
+class CustomHandler(FTPHandler):
 
-    exclude_path = os.getcwd() + '/ftp/'
+    def get_local_path(self, path):
+        exclude_path = os.getcwd() + '/ftp/'
+        return path.split(exclude_path)[-1]
 
     def on_file_received(self, filename):
-        job_queue.put(filename)
+        job_queue.put(lambda: upload_file(filename))
 
     def ftp_MKD(self, path):
-        if path is not None and not os.path.exists(path):
-            os.mkdir(path)
-            local_path = path.split(self.exclude_path)[-1]
+        path = FTPHandler.ftp_MKD(self, path)
+        if path:
+            local_path = self.get_local_path(path)
             s3_dir = s3_bucket.new_key(local_path + '/')
             s3_dir.set_contents_from_string('')
-            log.debug('New folder: %s' % local_path)
-            self.respond(
-                '257 "%s" dir created.' % path.replace('"', '""'))
-            return path
+            log.debug('New S3 folder: %s' % local_path)
 
     def ftp_RMD(self, path):
-        if path is not None and os.path.exists(path):
-            os.rmdir(path)
-            local_path = path.split(self.exclude_path)[-1]
-            for item in s3_bucket.list(prefix=local_path.strip('/')):
+        FTPHandler.ftp_RMD(self, path)
+        if path:
+            local_path = self.get_local_path(path)
+            for item in s3_bucket.list(prefix=local_path.strip('/') + '/'):
                 item.delete()
-                log.debug('Deleted file: %s ' % item.name)
-            s3_bucket.delete_key(local_path + '/')
-            log.debug('Deleted folder : %s' % local_path)
-            self.respond('250 Directory Removed')
-            return path
+                log.debug('Deleted S3 item: %s ' % item.name)
 
     def ftp_DELE(self, path):
-        if path is not None and os.path.exists(path):
-            os.unlink(path)
-            local_path = path.split(self.exclude_path)[-1]
+        path = FTPHandler.ftp_DELE(self, path)
+        if path:
+            local_path = self.get_local_path(path)
             s3_bucket.delete_key(local_path)
-            log.debug('Deleted file: %s ' % local_path)
-            self.respond("250 File removed.")
-            return path
+            log.debug('Deleted S3 file: %s ' % local_path)
+
+    def ftp_RNTO(self, path):
+        src_full, dest_full = FTPHandler.ftp_RNTO(self, path)
+        src = self.get_local_path(src_full)
+        dest = self.get_local_path(dest_full)
+        if os.path.isfile(dest_full):
+            log.debug('Moving file in S3: %s to %s' % (src, dest))
+            s3_bucket.copy_key(dest, s3_bucket.name, src)
+            s3_bucket.delete_key(src)
+        elif os.path.isdir(dest_full):
+            log.debug('Moving folder in S3: %s to %s' % (src, dest))
+            for item in s3_bucket.list(prefix=src.strip('/') + '/'):
+                filename = item.name.split(src)[-1]
+                s3_bucket.copy_key(
+                        dest + filename,
+                        s3_bucket.name,
+                        src + filename)
+                item.delete()
+                log.debug('Moved S3 item: %s ' % dest + filename)
 
 
 def main():
@@ -122,7 +134,7 @@ def main():
                         perm='elradfmwM')
 
     # Instantiate FTP handler class
-    handler = FTPHandler
+    handler = CustomHandler
     handler.permit_foreign_addresses = True
     handler.passive_ports = passive_range
     handler.authorizer = authorizer
