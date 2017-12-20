@@ -105,6 +105,7 @@ def rm_dir(path):
 
 
 class FTPWorker(threading.Thread):
+
     def __init__(self, q, worker_id):
         self.q = q
         self.worker_id = worker_id
