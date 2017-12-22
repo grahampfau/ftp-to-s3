@@ -36,15 +36,16 @@ job_queue = Queue()
 
 def restore_bucket():
     # Restore contents from S3 bucket
+    dirs = [i.name.rsplit('/', 1)[0] for i in s3_bucket.list()]
+    for dir in dirs:
+        restore_dir(dir)
     for item in s3_bucket.list():
-        if item.name.endswith('/'):
-            restore_dir(item)
-        else:
+        if not item.name.endswith('/'):
             restore_file(item)
 
 
 def restore_dir(item):
-    directory = 'ftp/' + item.name
+    directory = 'ftp/' + item
     if not os.path.exists(directory):
         log.debug('Restoring directory: %s' % directory)
         os.makedirs(directory, exist_ok=True)
@@ -95,7 +96,7 @@ def rename(src_full, dest_full):
         log.debug('Moving folder in S3: %s to %s' % (src, dest))
         # We're removing write access during folder move to avoid
         # race conditions.
-        subprocess.call(['chmod', '-R', '-w', dest_full])
+        subprocess.call(['chmod', '-R', '444', dest_full])
         for item in s3_bucket.list(prefix=src.strip('/') + '/'):
             filename = item.name.split(src)[-1]
             s3_bucket.copy_key(
@@ -103,8 +104,8 @@ def rename(src_full, dest_full):
                     s3_bucket.name,
                     src + filename)
             item.delete()
-            log.debug('Moved S3 item: %s ' % dest + filename)
-        subprocess.call(['chmod', '-R', '+w', dest_full])
+            log.debug('Moved S3 item: %s' % dest + filename)
+        subprocess.call(['chmod', '-R', '755', dest_full])
 
 
 def delete(path):
