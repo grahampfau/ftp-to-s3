@@ -1,5 +1,6 @@
 import logging
 import os
+import subprocess
 import threading
 from queue import Queue
 
@@ -92,18 +93,18 @@ def rename(src_full, dest_full):
         s3_bucket.delete_key(src)
     elif os.path.isdir(dest_full):
         log.debug('Moving folder in S3: %s to %s' % (src, dest))
+        # We're removing write access during folder move to avoid
+        # race conditions.
+        subprocess.call(['chmod', '-R', '-w', dest_full])
         for item in s3_bucket.list(prefix=src.strip('/') + '/'):
             filename = item.name.split(src)[-1]
-            try:
-                s3_bucket.copy_key(
-                        dest + filename,
-                        s3_bucket.name,
-                        src + filename)
-            except S3ResponseError:
-                log.warning('Source file not found in S3: %s' % src)
-                upload_file(dest_full)
+            s3_bucket.copy_key(
+                    dest + filename,
+                    s3_bucket.name,
+                    src + filename)
             item.delete()
             log.debug('Moved S3 item: %s ' % dest + filename)
+        subprocess.call(['chmod', '-R', '+w', dest_full])
 
 
 def delete(path):
