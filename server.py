@@ -4,6 +4,7 @@ import threading
 from queue import Queue
 
 from boto.s3.connection import S3Connection
+from boto.exception import S3ResponseError
 from boto.s3.key import Key
 from pyftpdlib.authorizers import DummyAuthorizer
 from pyftpdlib.handlers import FTPHandler
@@ -62,12 +63,20 @@ def get_local_path(path):
 
 def upload_file(filename):
     # Upload to S3, get URL
+    if not os.path.exists(filename):
+        return
     s3_key = Key(s3_bucket)
     s3_key.key = filename.split(os.getcwd() + '/ftp')[-1]
     s3_key.set_contents_from_filename(filename)
-    s3_key.set_acl('public-read')
-    url = s3_key.generate_url(expires_in=86400)  # 1 day
-    log.debug(('File now in S3 at: {}'.format(url)))
+    try:
+        s3_key.set_acl('public-read')
+        url = s3_key.generate_url(expires_in=86400)  # 1 day
+        log.debug(('File now in S3 at: {}'.format(url)))
+    except S3ResponseError:
+        # There are race conditions during rename where a file
+        # can be deleted mid-upload in S3 by another worker.
+        log.warning('File deleted mid-upload: %s Retrying.' % s3_key.key)
+        upload_file(filename)
 
 
 def rename(src_full, dest_full):
@@ -75,16 +84,24 @@ def rename(src_full, dest_full):
     dest = get_local_path(dest_full)
     if os.path.isfile(dest_full):
         log.debug('Moving file in S3: %s to %s' % (src, dest))
-        s3_bucket.copy_key(dest, s3_bucket.name, src)
+        try:
+            s3_bucket.copy_key(dest, s3_bucket.name, src)
+        except S3ResponseError:
+            log.warning('Source file not found in S3: %s' % src)
+            upload_file(dest_full)
         s3_bucket.delete_key(src)
     elif os.path.isdir(dest_full):
         log.debug('Moving folder in S3: %s to %s' % (src, dest))
         for item in s3_bucket.list(prefix=src.strip('/') + '/'):
             filename = item.name.split(src)[-1]
-            s3_bucket.copy_key(
-                    dest + filename,
-                    s3_bucket.name,
-                    src + filename)
+            try:
+                s3_bucket.copy_key(
+                        dest + filename,
+                        s3_bucket.name,
+                        src + filename)
+            except S3ResponseError:
+                log.warning('Source file not found in S3: %s' % src)
+                upload_file(dest_full)
             item.delete()
             log.debug('Moved S3 item: %s ' % dest + filename)
 
