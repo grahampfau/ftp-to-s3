@@ -120,7 +120,7 @@ class FTPWorker(threading.Thread):
         threading.Thread.__init__(self)
 
     def run(self):
-        log.debug('Worker %s online' % self.worker_id)
+        log.debug('Worker %i online' % self.worker_id)
         while True:
             log.debug('Worker %i waiting for job ... %i' % (
                     self.worker_id,
@@ -132,9 +132,13 @@ class FTPWorker(threading.Thread):
                 job_queue.qsize()))
             try:
                 func()
-                log.debug('Task done, qsize: %i' % job_queue.qsize())
+                log.debug('Worker %i task done, qsize: %i' % (
+                    self.worker_id,
+                    job_queue.qsize()))
             except Exception as e:
-                log.error('Task failed with error: %s' % str(e))
+                log.error('Worker %i task failed with error: %s' % (
+                    self.worker_id,
+                    str(e)))
             finally:
                 job_queue.task_done()
 
