@@ -36,15 +36,23 @@ def restore_bucket():
     # Restore contents from S3 bucket
     for item in s3_bucket.list():
         if item.name.endswith('/'):
-            directory = 'ftp/' + item.name
-            if not os.path.exists(directory):
-                log.debug('Restoring directory: %s' % directory)
-                os.makedirs(directory, exist_ok=True)
+            restore_dir(item)
         else:
-            filename = 'ftp/' + item.name
-            if not os.path.exists(filename):
-                log.debug('Restoring file: %s' % filename)
-                item.get_contents_to_filename(filename)
+            restore_file(item)
+
+
+def restore_dir(item):
+    directory = 'ftp/' + item.name
+    if not os.path.exists(directory):
+        log.debug('Restoring directory: %s' % directory)
+        os.makedirs(directory, exist_ok=True)
+
+
+def restore_file(item):
+    filename = 'ftp/' + item.name
+    if not os.path.exists(filename):
+        log.debug('Restoring file: %s' % filename)
+        item.get_contents_to_filename(filename)
 
 
 def get_local_path(path):
