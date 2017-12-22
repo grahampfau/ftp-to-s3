@@ -1,6 +1,5 @@
 import logging
 import os
-import subprocess
 import threading
 from queue import Queue
 
@@ -96,7 +95,10 @@ def rename(src_full, dest_full):
         log.debug('Moving folder in S3: %s to %s' % (src, dest))
         # We're removing write access during folder move to avoid
         # race conditions.
-        subprocess.call(['chmod', '-R', '444', dest_full])
+        authorizer.override_perm(konf.ftp_username,
+                            dest_full,
+                            perm='elr',
+                            recursive=True)
         for item in s3_bucket.list(prefix=src.strip('/') + '/'):
             filename = item.name.split(src)[-1]
             s3_bucket.copy_key(
@@ -105,7 +107,11 @@ def rename(src_full, dest_full):
                     src + filename)
             item.delete()
             log.debug('Moved S3 item: %s' % dest + filename)
-        subprocess.call(['chmod', '-R', '755', dest_full])
+        # Now that we're done with the move, we restore access.
+        authorizer.override_perm(konf.ftp_username,
+                            dest_full,
+                            perm='elradfmwM',
+                            recursive=True)
 
 
 def delete(path):
@@ -186,6 +192,8 @@ class CustomHandler(FTPHandler):
 
 def main():
     # Instantiate a dummy authorizer for managing 'virtual' users
+    # We need 'global' access for the rename function.
+    global authorizer
     authorizer = DummyAuthorizer()
 
     # Define a new user having full r/w permissions
