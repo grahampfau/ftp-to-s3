@@ -96,22 +96,21 @@ def rename(src_full, dest_full):
         # We're removing write access during folder move to avoid
         # race conditions.
         authorizer.override_perm(konf.ftp_username,
-                            dest_full,
-                            perm='elr',
-                            recursive=True)
+                                 dest_full,
+                                 perm='elr',
+                                 recursive=True)
         for item in s3_bucket.list(prefix=src.strip('/') + '/'):
             filename = item.name.split(src)[-1]
-            s3_bucket.copy_key(
-                    dest + filename,
-                    s3_bucket.name,
-                    src + filename)
+            s3_bucket.copy_key(dest + filename,
+                               s3_bucket.name,
+                               src + filename)
             item.delete()
             log.debug('Moved S3 item: %s' % dest + filename)
         # Now that we're done with the move, we restore access.
         authorizer.override_perm(konf.ftp_username,
-                            dest_full,
-                            perm='elradfmwM',
-                            recursive=True)
+                                 dest_full,
+                                 perm='elradfmwM',
+                                 recursive=True)
 
 
 def delete(path):
@@ -148,22 +147,22 @@ class FTPWorker(threading.Thread):
         log.debug('Worker %i online' % self.worker_id)
         while True:
             log.debug('Worker %i waiting for job ... %i' % (
-                    self.worker_id,
-                    job_queue.qsize()))
+                      self.worker_id,
+                      job_queue.qsize()))
             func = job_queue.get()
             log.debug('Worker %i got job: %s, qsize: %i' % (
-                self.worker_id,
-                func,
-                job_queue.qsize()))
+                      self.worker_id,
+                      func,
+                      job_queue.qsize()))
             try:
                 func()
                 log.debug('Worker %i task done, qsize: %i' % (
-                    self.worker_id,
-                    job_queue.qsize()))
+                          self.worker_id,
+                          job_queue.qsize()))
             except Exception as e:
                 log.error('Worker %i task failed with error: %s' % (
-                    self.worker_id,
-                    str(e)))
+                          self.worker_id,
+                          str(e)))
             finally:
                 job_queue.task_done()
 
